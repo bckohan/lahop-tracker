@@ -2,31 +2,32 @@
  * The following field needs to be set to the ID of the spreadsheet to sync to.
  */
 var HOP_SHEET_ID = '1vfzkKmBUYTy5fn-L4maZXEfN8hlAX1kQDYsvgblWxQA'; // the google spreadsheet ID
+var SHEET_NAME = 'HOPS';
+var FWD_SHEET = 'Forwards';
 
 // this is the search string as you would type it into Gmail search
 var HOP_QUERY = 'from: donotreply@lahsa.org subject: Outreach Request';
 var SUBJ_RE = /\(Request ID: (\d+)\)/;
-var SHEET_NAME = 'HOPS';
 var LAST_SYNC = null;
 var HOP_SHEET = null;
 var FWD_SHEET = null;
-var VERSION = '0.0.3';
+var VERSION = 0;
 var LAST_VERSION = null;
 
 var columns = {
     "LA-HOP ID": null,
+    "Status": null,
     'Name': null,
     "Origin Date": null,
-    'Vol': null,
-    "Vol Phone": null,
-    "Submit Email": null,
+    "Last Update": null,
     "#PPL": null,
     "Address": null,
     "Location Description": null,
     "Physical Description": null,
     "Needs Description": null,
-    "Status": null,
-    "Resolve Date": null
+    'Vol': null,
+    "Vol Phone": null,
+    "Submit Email": null
 };
 
 var col_map = {
@@ -94,7 +95,7 @@ function getGlobalMeta() {
       LAST_SYNC = Date.parse(meta.getValue());
     }
     for (const meta of HOP_SHEET.createDeveloperMetadataFinder().withKey('version').find()) {
-      LAST_VERSION = meta.getValue();
+      LAST_VERSION = parseInt(meta.getValue());
     }
 }
 
@@ -119,7 +120,7 @@ function findHOPs() {
             var msgs = threads[i].getMessages();
             newestTime = null;
             for (var j in msgs) {
-                if (LAST_VERSION === VERSION && LAST_SYNC && msgs[j].getDate() <= LAST_SYNC) { continue; }
+                if (LAST_VERSION >= VERSION && LAST_SYNC && msgs[j].getDate() <= LAST_SYNC) { continue; }
                 if (newestTime === null || msgs[j].getDate() > newestTime) {
                     newestTime = msgs[j].getDate();
                 }
@@ -242,10 +243,10 @@ function addHeaders() {
         var col_name = meta[0].getValue();
         columns[col_name] = idx;
       }
-      idx++;
       if (idx > last_col) {
         break;
       }
+      idx++;
     }
     for (const [name, col] of Object.entries(columns)) {
       if (col == null) {
@@ -255,25 +256,52 @@ function addHeaders() {
     }
 }
 
+function toRow(hop) {
+  var row = [];
+  for (const [attr, val] of Object.entries(hop)) {
+    var idx = columns[attr_map[attr]];
+    while (row.length < idx) {
+      row.push(null);
+    }
+    row[idx-1] = val;
+  }
+  console.log(row);
+  return row;
+}
+
 function writeHOPs(hops) {
-    //metadata isnt a simple key value store because google's spreadsheets API suuuuucks
-    for (const meta of HOP_SHEET.createDeveloperMetadataFinder().withKey('sync_time').find()) { meta.remove(); }
-    for (const meta of HOP_SHEET.createDeveloperMetadataFinder().withKey('version').find()) { meta.remove(); }
-    HOP_SHEET.addDeveloperMetadata('sync_time', Utilities.formatDate(new Date(), 'America/Los_Angeles', 'MMMM dd, yyyy HH:mm:ss Z'));
-    HOP_SHEET.addDeveloperMetadata('version', VERSION);
 
-    // first pass, search for HOPs by ID in sheet and update the found ones
-    var row = 1;
-    for (const hop_id of HOP_SHEET.getRange(`${columnToLetter(columns['LA-HOP ID'])}:${columnToLetter(columns['LA-HOP ID'])}`).getValues()[0]) {
-      if (hops.hasOwnProperty(hop_id.toString())) {
+  if (hops.length == 0) {
+    return;
+  }
 
-        delete hops[hop_id.toString()];
-      }
-      row++;
+  //metadata isnt a simple key value store because google's spreadsheets API suuuuucks
+  for (const meta of HOP_SHEET.createDeveloperMetadataFinder().withKey('sync_time').find()) { meta.remove(); }
+  for (const meta of HOP_SHEET.createDeveloperMetadataFinder().withKey('version').find()) { meta.remove(); }
+  HOP_SHEET.addDeveloperMetadata('sync_time', Utilities.formatDate(new Date(), 'America/Los_Angeles', 'MMMM dd, yyyy HH:mm:ss Z'));
+  HOP_SHEET.addDeveloperMetadata('version', VERSION);
+
+  // first pass, search for HOPs by ID in sheet and update the found ones
+  var row = 1;
+  for (const hop_id of HOP_SHEET.getRange(`${columnToLetter(columns['LA-HOP ID'])}:${columnToLetter(columns['LA-HOP ID'])}`).getValues()[0]) {
+    if (hops.hasOwnProperty(hop_id.toString())) {
+      HOP_SHEET.setValues([toRow(hops[hop_id.toString()])]);
+      delete hops[hop_id.toString()];
     }
+    row++;
+  }
 
-    // second pass, add remaining HOPs to top of sheet in descending date order of creation
-    for (const [hop_id, hop] of Object.entries(hops)) {
+  // second pass, add remaining HOPs to top of sheet in descending date order of creation
+  var rows = [];
+  for (const [hop_id, hop] of Object.entries(hops)) {
+    rows.push(toRow(hop));
+  }
 
-    }
+  //TODO sort array by time
+
+  if (rows.length > 0) {
+    var insertRange = HOP_SHEET.getRange(`A2:${columnToLetter(HOP_SHEET.getLastColumn())}${rows.length+1}`);
+    insertRange.insertCells(SpreadsheetApp.Dimension.ROWS);
+    insertRange.setValues(rows);
+  }
 }
