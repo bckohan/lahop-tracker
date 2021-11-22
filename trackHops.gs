@@ -1,36 +1,54 @@
 /**
- * The following two fields need to be updated.
+ * The following field needs to be set to the ID of the spreadsheet to sync to.
  */
-var ACCOUNT = Session.getActiveUser().getEmail();
 var HOP_SHEET_ID = '1vfzkKmBUYTy5fn-L4maZXEfN8hlAX1kQDYsvgblWxQA'; // the google spreadsheet ID
-var ORG_DOMAIN = 'selahnhc.org'; // The domain of your org, i.e. the domain.org part of email@domain.org
-
 
 // this is the search string as you would type it into Gmail search
 var HOP_QUERY = 'from: donotreply@lahsa.org subject: Outreach Request';
 var SUBJ_RE = /\(Request ID: (\d+)\)/;
-var SHEET_NAME = ACCOUNT.substr(0, ACCOUNT.indexOf('@')).replace('selah', '');
+var SHEET_NAME = 'HOPS';
 var LAST_SYNC = null;
-var CURRENT_SYNC = null;
+var HOP_SHEET = null;
+var FWD_SHEET = null;
+var VERSION = '0.0.2';
+var LAST_VERSION = null;
 
 var columns = {
-    "LA-HOP ID": 1,
-    "Origin Date": 2,
-    "Vol Phone": 3,
-    "#PPL": 4,
-    "Address": 5,
-    "Location Description": 6,
-    "Physical Description": 7,
-    "Needs Description": 8,
-    "Status": 9,
-    "Resolve Date": 10
+    "LA-HOP ID": null,
+    'Name': null,
+    "Origin Date": null,
+    'Vol': null,
+    "Vol Phone": null,
+    "Submit Email": null,
+    "#PPL": null,
+    "Address": null,
+    "Location Description": null,
+    "Physical Description": null,
+    "Needs Description": null,
+    "Status": null,
+    "Resolve Date": null
 };
 
-for (var a in GmailApp.getAliases()) {
-    let alias = GmailApp.getAliases()[a];
-    if (alias.endsWith(ORG_DOMAIN)) {
-        SHEET_NAME = alias.substr(0, addy.indexOf('@'));
-    }
+var col_map = {
+    "LA-HOP ID": 'id',
+    'Name': 'name',
+    "Origin Date": 'time',
+    'Vol': 'vol',
+    "Vol Phone": 'phone',
+    "Submit Email": 'email',
+    "#PPL": 'num',
+    "Address": 'addr',
+    "Location Description": 'location',
+    "Physical Description": 'desc',
+    "Needs Description": 'needs',
+    "Status": 'status',
+    "Last Update": 'last_update'
+};
+
+// reverse lookup of col_map - all this is very ugly but whatever
+var attr_map = {};
+for ( const [col, attr] of Object.entries(col_map) ) {
+  attr_map[attr] = col;
 }
 
 // component regexes
@@ -48,19 +66,36 @@ var attr_re = {
     'email': /<p><strong>Email: <\/strong>(.*)<\/p>/,
     'phone': /<p><strong>Phone: <\/strong>(.*)<\/p>/
 };
+function columnToLetter(column) {
+  var temp, letter = '';
+  while (column > 0) {
+    temp = (column - 1) % 26;
+    letter = String.fromCharCode(temp + 65) + letter;
+    column = (column - temp - 1) / 26;
+  }
+  return letter;
+}
+
+function letterToColumn(letter) {
+  var column = 0, length = letter.length;
+  for (var i = 0; i < length; i++) {
+    column += (letter.charCodeAt(i) - 64) * Math.pow(26, length - i - 1);
+  }
+  return column;
+}
 
 //DATE_TIME_RE = /(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{1,2})(.*) (A|P)M/;
 
 const NotificationType = Object.freeze({"NEW":1, "UPDATE":2, "RECEIVED":3, "UNKNOWN": 4});
 const Status = Object.freeze({"UNRESOLVED":1, "NO_CONTACT":2, "CONTACT":3, "REDUNDANT": 4});
 
-function getGlobalMeta(sheet, key) {
-    //todo this probably isn't write - the meta API is very obtuse
-    arr = sheet.createDeveloperMetadataFinder().withKey(key).find();
-    if (arr && arr.length > 0) {
-        return arr[idx];
+function getGlobalMeta() {
+    for (const meta of HOP_SHEET.createDeveloperMetadataFinder().withKey('sync_time').find()) {
+      LAST_SYNC = Date.parse(meta.getValue());
     }
-    return null;
+    for (const meta of HOP_SHEET.createDeveloperMetadataFinder().withKey('version').find()) {
+      LAST_VERSION = meta.getValue();
+    }
 }
 
 // Main function, the one that you must select before run
@@ -68,8 +103,8 @@ function findHOPs() {
 
     console.log(`Searching for: "${HOP_QUERY}"`);
 
-    let sheet = getSheet();
-    LAST_SYNC = getGlobalMeta(sheet, 'sync_time');
+    getSheet();
+    getGlobalMeta();
     let lastProcessed = null;
     let newestTime = null;
     let start = 0;
@@ -84,7 +119,7 @@ function findHOPs() {
             var msgs = threads[i].getMessages();
             newestTime = null;
             for (var j in msgs) {
-                if (LAST_SYNC && msgs[j].getDate() <= LAST_SYNC) { continue; }
+                if (LAST_VERSION === VERSION && LAST_SYNC && msgs[j].getDate() <= LAST_SYNC) { continue; }
                 if (newestTime === null || msgs[j].getDate() > newestTime) {
                     newestTime = msgs[j].getDate();
                 }
@@ -113,10 +148,8 @@ function findHOPs() {
         threads = GmailApp.search(HOP_QUERY, start, max);
     }
 
-    console.info(SHEET_NAME);
     console.info(hops);
-    console.log(lastProcessed);
-    //writeHOPs(sheet, hops);
+    writeHOPs(hops);
 }
 
 function setAttribute(re, line, parts, attr) {
@@ -183,31 +216,51 @@ function processMessage(msg) {
 // Add contents to sheet
 function getSheet() {
     var hop_ss = SpreadsheetApp.openById(HOP_SHEET_ID);
-    var sheet = hop_ss.getSheetByName(SHEET_NAME);
-    if (sheet === null) {
-        sheet = hop_ss.insertSheet(SHEET_NAME);
-        addHeaders(sheet);
+    HOP_SHEET = hop_ss.getSheetByName(SHEET_NAME);
+    if (HOP_SHEET === null) {
+        HOP_SHEET = hop_ss.insertSheet(SHEET_NAME);
     }
-    return sheet;
+    addHeaders();
 }
 
-function addHeaders(sheet) {
-    sheet.setFrozenRows(1);
-    var range = sheet.getRange("A1:J1");
-    range.setValues([Object.keys(columns)]);
-    for (const col in columns) {
-        sheet.getRange(1, columns[col]).addDeveloperMetadata('col_name', col);
+function addHeader(name, idx) {
+  HOP_SHEET.getRange(`${columnToLetter(idx)}1:${columnToLetter(idx)}1`).setValue(name);
+  HOP_SHEET.getRange(`${columnToLetter(idx)}:${columnToLetter(idx)}`).addDeveloperMetadata('col_name', name);
+  columns[name] = idx;
+}
+
+function addHeaders() {
+  /**
+   * Add in the column headers if they dont exist by searching for their meta. Record column numbers for each header and add any unfound columns onto the end.
+   */
+    var last_col = HOP_SHEET.getLastColumn();
+    HOP_SHEET.setFrozenRows(1);
+    var idx = 1;
+    for (const val in HOP_SHEET.getRange('1:1').getValues()[0]) {
+      var meta = HOP_SHEET.getRange(`${columnToLetter(idx)}:${columnToLetter(idx)}`).createDeveloperMetadataFinder().withKey('col_name').find();
+      if (meta.length > 0) {
+        var col_name = meta[0].getValue();
+        columns[col_name] = idx;
+      }
+      idx++;
+      if (idx > last_col) {
+        break;
+      }
     }
-    var range = sheet.getRange(1, 1);
+    for (const [name, col] of Object.entries(columns)) {
+      if (col == null) {
+        addHeader(name, idx);
+        idx++;
+      }
+    }
 }
 
-function resolveColNums() {
-
-}
-
-function writeHOPs(sheet, hops) {
-    // TODO
-    sheet.addDeveloperMetadata('sync_time', CURRENT_SYNC);
+function writeHOPs(hops) {
+    //metadata isnt a simple key value store because google's spreadsheets API suuuuucks
+    for (const meta of HOP_SHEET.createDeveloperMetadataFinder().withKey('sync_time').find()) { meta.remove(); }
+    for (const meta of HOP_SHEET.createDeveloperMetadataFinder().withKey('version').find()) { meta.remove(); }
+    HOP_SHEET.addDeveloperMetadata('sync_time', Utilities.formatDate(new Date(), 'America/Los_Angeles', 'MMMM dd, yyyy HH:mm:ss Z'));
+    HOP_SHEET.addDeveloperMetadata('version', VERSION);
 
     // first pass, search for HOPs by ID in sheet and update the found ones
 
