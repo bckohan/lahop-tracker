@@ -10,7 +10,7 @@ var SHEET_NAME = 'HOPS';
 var LAST_SYNC = null;
 var HOP_SHEET = null;
 var FWD_SHEET = null;
-var VERSION = '0.0.2';
+var VERSION = '0.0.3';
 var LAST_VERSION = null;
 
 var columns = {
@@ -263,6 +263,17 @@ function writeHOPs(hops) {
     HOP_SHEET.addDeveloperMetadata('version', VERSION);
 
     // first pass, search for HOPs by ID in sheet and update the found ones
+    var row = 1;
+    for (const hop_id of HOP_SHEET.getRange(`${columnToLetter(columns['LA-HOP ID'])}:${columnToLetter(columns['LA-HOP ID'])}`).getValues()[0]) {
+      if (hops.hasOwnProperty(hop_id.toString())) {
+
+        delete hops[hop_id.toString()];
+      }
+      row++;
+    }
 
     // second pass, add remaining HOPs to top of sheet in descending date order of creation
+    for (const [hop_id, hop] of Object.entries(hops)) {
+
+    }
 }
