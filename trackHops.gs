@@ -68,15 +68,15 @@ var columns = {
     'Name': null,
     "Origin Date": null,
     "Last Update": null,
+    'Vol': null,
+    "Vol Phone": null,
+    "Submit Email": null,
+    "FWD": null,
     "#PPL": null,
     "Address": null,
     "Location Description": null,
     "Physical Description": null,
     "Needs Description": null,
-    'Vol': null,
-    "Vol Phone": null,
-    "Submit Email": null,
-    "FWD": null
 };
 
 // map column header names in the spreadsheet to hop object attributes - these could be the same, but meh lazy
@@ -147,9 +147,18 @@ function letterToColumn(letter) {
 //DATE_TIME_RE = /(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{1,2})(.*) (A|P)M/;
 
 const NotificationType = Object.freeze({"NEW":1, "UPDATE":2, "RECEIVED":3, "UNKNOWN": 4});
-const Status = Object.freeze({"UNRESOLVED":1, "NO_CONTACT":2, "CONTACT":3, "DISMISSED": 4});
+const Status = Object.freeze({"UNRESOLVED":1, "FAILED":2, "SUCCESS":3, "DISMISSED": 4, 'UNCATEGORIZED': 5});
+var StatusReverse = {};
+for (const [status, code] of Object.entries(Status)) {
+  StatusReverse[code] = status;
+}
 
 function getGlobalMeta() {
+  /**
+   * Fetch global parameters attached to the sheet we use to track how much if anything needs to be
+   * run or re-run. This includes, the last time the sheet was synchronized to the gmail account and
+   * the version number of this script that was last used to synchronize.
+   */
     for (const meta of HOP_SHEET.createDeveloperMetadataFinder().withKey('sync_time').find()) {
       LAST_SYNC = Date.parse(meta.getValue());
     }
@@ -204,11 +213,33 @@ function buildForwardTable() {
         }
       }
     }
-    console.info(`Forward Table: ${fwd_table}`);
+
+    console.info(`Forward Table:`);
+    for (const [phone, email] of Object.entries(fwd_table)) {
+      console.info(`\t${phone} -> ${email}`);
+    }
 }
 
 // Main function, the one that you must select before run
-function findHOPs() {
+function logHOPs() {
+  /**
+   * Main logic tree. Read through all emails in chunks of 500 at a time matching the HOP query. This will return some false
+   * positives because the native gmail filtering capability is not very robust. We reject the false positives if we are unable
+   * to parse out their attributes as HOPs.
+   *
+   * General logic is thus:
+   *  1) Fetch the HOP sheet, do some (re)initialization if needed and grab information from the last synchronization off of it.
+   *  2) Work through emails matching HOP search 500 at a time:
+   *      a. Stop searching when we see an email older than our last synchronization time - unless this is a new version of the script
+   *      b. Try to parse the email as a HOP - skip it if we fail, its not a HOP
+   *      c. Add (or Update) parsed HOP object to our registry in local mem
+   *      d. Forward email if:
+   *        - we have a registered forward address for the phone #
+   *        - the message itself was not forwarded but came straight to our HOP reception account
+   *        - the spreadsheet has been previously synced (don't want lots of errant forwards initially)
+   *        - the message is newer than the last synchronization time
+   *      e. write HOP list to spreadsheet
+   */
 
     console.log(`Searching for: "${HOP_QUERY}"`);
 
@@ -256,13 +287,11 @@ function findHOPs() {
                           }
                       }
                   }
-                  // only forward if the following conditions are met:
-                  // 1) we have a registered forward address for the phone #
-                  // 2) the message itself was not forwarded but came straight to our HOP reception account
-                  // 3) the spreadsheet has been previously synced (don't want lots of errant forwards initially)
-                  // 4) the message is newer than the last synchronization time
+
+                  // forward message if we should
                   if (!msgAttrs.fwd && LAST_SYNC && msgs[j].getDate() > LAST_SYNC) {
                     if (fwd_table.hasOwnProperty(msgAttrs.phone)) {
+                      console.log(`Forwarding ${msgAttrs.id} -> ${fwd_table[msgAttrs.phone]}`);
                       msgs[j].forward(fwd_table[msgAttrs.phone]);
                     }
                   }
@@ -275,7 +304,7 @@ function findHOPs() {
         threads = GmailApp.search(HOP_QUERY, start, max);
     }
 
-    console.info(hops);
+    //console.info(hops);
     writeHOPs(hops);
 }
 
@@ -306,7 +335,7 @@ function setAttribute(regexes, line, parts, attr) {
 
 function processMessage(msg) {
     let parts = {
-        'last_update': msg.getDate(),
+        'last_update': msg.getDate(), // TODO this wont do for forwards!!
         'type': NotificationType.UNKNOWN,
         'status': Status.UNRESOLVED
     };
@@ -333,14 +362,17 @@ function processMessage(msg) {
             if (setAttribute(attr_re[attr], lines[idx], parts, attr)) continue;
         }
         if (parts.type !== NotificationType.NEW && parts.status === Status.UNRESOLVED) {
-            if (lines[idx].includes('unable to make contact after two attempts')) {
-                parts.status = Status.NO_CONTACT;
+            if (lines[idx].includes('unable to make contact') || lines[idx].includes('unable to locate the individual')) {
+                parts.status = Status.FAILED;
             } else if (lines[idx].includes('made contact with the individual')) {
-                parts.status = Status.CONTACT;
+                parts.status = Status.SUCCESS;
             } else if (lines[idx].includes('already serving the area listed')) {
                 parts.status = Status.DISMISSED;
             }
         }
+    }
+    if (parts.type !== NotificationType.NEW && parts.status === Status.UNRESOLVED) {
+      parts.status = Status.UNCATEGORIZED;
     }
     if (parts.time !== null && typeof parts.time === 'string') {
         /*let dt = DATE_TIME_RE.exec(parts.time);
@@ -412,7 +444,76 @@ function toRow(hop) {
     }
     row[idx-1] = val;
   }
+  // convert status #
+  row[columns['Status']-1] = StatusReverse[row[columns['Status']-1]];
   return row;
+}
+
+function needsUpdates(oldestNewHop) {
+  /**
+   * Determine if some new hops need to be inserted between existing rows on the spreadsheet. This could happen if people forward HOPs later.
+   */
+  return oldestNewHop < new Date(HOP_SHEET.getRange(`${columnToLetter(columns['Origin Date'])}2:${columnToLetter(columns['Origin Date'])}2`).getValue());
+}
+
+function doRandomInserts(rows) {
+  /**
+   * Insert new out of order HOPs where they belong in the existing list and update pre-existing HOPs.
+   *
+   * Returns a list of all new HOPs that were not inserted.
+   */
+  /*getSheet();
+  rows = [];
+  var now = new Date();
+  for (const month of [11, 10, 9, 8, 7, 6, 5, 4]) {
+    rows.push(Array.apply(null, Array(14)).map(function (x, i) { return null; }));
+    rows[rows.length-1][3] = new Date(now.getFullYear(), month, now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds());
+  }*/
+
+  if (rows.length > 0) {
+    var mark = new Date(HOP_SHEET.getRange(`${columnToLetter(columns['Origin Date'])}2:${columnToLetter(columns['Origin Date'])}2`).getValue());
+    var randomInserts = [];
+    var rows2 = [];
+    for (const hop of rows.reverse()) {
+      if (hop[columns['Origin Date']-1] >= mark) {
+        rows2.unshift(hop);
+      } else {
+        randomInserts.unshift(hop);
+      }
+    }
+    rows = rows2;
+    // this is an O(n) operation but thats fine for now. On a big sheet this might get annoying, HOPs are submitted at a rate of about 50/day
+    if (randomInserts.length > 0) {
+      var times = HOP_SHEET.getRange(`${columnToLetter(columns['Origin Date'])}:${columnToLetter(columns['Origin Date'])}`).getValues().slice(1);
+      var randomIdx = 0;
+      var timeRow = 2;
+      for (var time of times) {
+        time = new Date(time);
+        if (!isNaN(time.getTime())) {
+          while (randomInserts.length > randomIdx && randomInserts[randomIdx][columns['Origin Date']-1] >= time) {
+            var insertRange = HOP_SHEET.getRange(`A${timeRow}:${columnToLetter(randomInserts[randomIdx].length)}${timeRow}`);
+            insertRange.insertCells(SpreadsheetApp.Dimension.ROWS);
+            insertRange.setValues([randomInserts[randomIdx]]);
+            randomIdx++;
+            timeRow++;
+          }
+          if (randomInserts.length <= randomIdx) break;
+        }
+        timeRow++;
+      }
+    }
+  }
+  return rows;
+}
+
+function submissionOrderDescending(row1, row2) {
+  if (row1[columns['Origin Date']-1] < row2[columns['Origin Date']-1]) {
+    return 1;
+  }
+  else if (row1[columns['Origin Date']-1] > row2[columns['Origin Date']-1]) {
+    return -1;
+  }
+  return 0;
 }
 
 function writeHOPs(hops) {
@@ -427,39 +528,53 @@ function writeHOPs(hops) {
   HOP_SHEET.addDeveloperMetadata('sync_time', Utilities.formatDate(new Date(), 'America/Los_Angeles', 'MMMM dd, yyyy HH:mm:ss Z'));
   HOP_SHEET.addDeveloperMetadata('version', VERSION);
 
-  // first pass, search for HOPs by ID in sheet and update the found ones
-  var row = 1;
-  for (const hop_id of HOP_SHEET.getRange(`${columnToLetter(columns['LA-HOP ID'])}:${columnToLetter(columns['LA-HOP ID'])}`).getValues()[0]) {
-    if (hops.hasOwnProperty(hop_id.toString())) {
-      HOP_SHEET.setValues([toRow(hops[hop_id.toString()])]);
-      delete hops[hop_id.toString()];
-    }
-    row++;
-  }
-
-  // second pass, add remaining HOPs to top of sheet in descending date order of creation
   var rows = [];
   for (const [hop_id, hop] of Object.entries(hops)) {
     rows.push(toRow(hop));
   }
-
-  function submissionOrderDescending(row1, row2) {
-    if (row1[columns['Origin Date']] < row2[columns['Origin Date']]) {
-      return 1;
-    }
-    else if (row1[columns['Origin Date']] > row2[columns['Origin Date']]) {
-      return -1;
-    }
-    return 0;
-  }
   rows.sort(submissionOrderDescending);
 
-  // determine if we got any out of order forwarded HOPs that may need to be inserted in order between already logged HOPs
-
-
   if (rows.length > 0) {
-    var insertRange = HOP_SHEET.getRange(`A2:${columnToLetter(HOP_SHEET.getLastColumn())}${rows.length+1}`);
-    insertRange.insertCells(SpreadsheetApp.Dimension.ROWS);
-    insertRange.setValues(rows);
+    // first pass, search for HOPs by ID in sheet and update the found ones
+    if (needsUpdates(rows[rows.length-1][columns['Origin Date']-1])) {
+      var remaining = [];
+      var existing = {};
+      var hidx = 1;
+      for (const hop of HOP_SHEET.getRange(`${columnToLetter(columns['LA-HOP ID'])}:${columnToLetter(columns['LA-HOP ID'])}`).getValues()) {
+        if (parseInt(hop[0])) {
+          existing[hop[0]] = hidx;
+        }
+        hidx++;
+      }
+      for (const hop of rows) {
+        var hid = hop[columns['LA-HOP ID']-1].toString();
+        if (existing.hasOwnProperty(hid)) {
+          var range = HOP_SHEET.getRange(`${existing[hid]}:${existing[hid]}`)
+          var current = range.getValues()[0];
+          if (hop[columns['Last Update']-1] > new Date(current[columns['Last Update']-1])) {
+            var vidx = 0;
+            for (const val in hop) {
+              if (val != null) {
+                current[vidx] = val;
+              }
+              vidx++;
+            }
+            range.setValues([current]);
+          }
+        } else {
+          remaining.push(hop);
+        }
+        row++;
+      }
+      // add any missing HOPS between existing rows in the table
+      rows = doRandomInserts(remaining);
+    }
+
+    // add all new HOPs to the top of the list
+    if (rows.length > 0) {
+      var insertRange = HOP_SHEET.getRange(`A2:${columnToLetter(HOP_SHEET.getLastColumn())}${rows.length+1}`);
+      insertRange.insertCells(SpreadsheetApp.Dimension.ROWS);
+      insertRange.setValues(rows);
+    }
   }
 }
