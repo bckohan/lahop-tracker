@@ -2,7 +2,7 @@
  * The following field(s) should be configured to your liking.
  */
 var HOP_SHEET_ID = '1vfzkKmBUYTy5fn-L4maZXEfN8hlAX1kQDYsvgblWxQA'; // the google spreadsheet ID of the sheet to hold the hop log and forward table
-var SHEET_NAME = 'HOPS';     // name to use for the sheet containing the HOP log
+var SHEET_NAME = 'HOPS2';     // name to use for the sheet containing the HOP log
 var FWD_SHEET = 'Forwards';  // this should be set to the name of the sheet in the spreadsheet that holds the forward table
 var HOP_LABEL = 'HOP';       // tag HOP emails with this label in gmail
 ///////////////////////////////////////////////////////////////////////
@@ -14,7 +14,7 @@ var HOP_QUERY = 'subject: Outreach Request'; //'from: donotreply@lahsa.org subje
 var SUBJ_RE = /\(Request ID: (\d+)\)/;
 var LAST_SYNC = null;
 var HOP_SHEET = null;
-var VERSION = 2;  // When the version is incremented all HOPs on the account will be reprocessed!
+var VERSION = 11;  // When the version is incremented all HOPs on the account will be reprocessed!
 var LAST_VERSION = null;
 
 var accountEmails = [Session.getActiveUser().getEmail()].concat(GmailApp.getAliases());
@@ -66,10 +66,13 @@ var columns = {
     "LA-HOP ID": null,
     "Status": null,
     'Name': null,
-    "Origin Date": null,
+    "Last Seen": null,
+    "Submit Date": null,
     "Last Update": null,
     'Vol': null,
     "Vol Phone": null,
+    'Org': null,
+    'Vol Desc': null,
     "Submit Email": null,
     "FWD": null,
     "#PPL": null,
@@ -83,9 +86,12 @@ var columns = {
 var col_map = {
     "LA-HOP ID": 'id',
     'Name': 'name',
-    "Origin Date": 'time',
+    "Last Seen": 'last_seen',
+    "Submit Date": 'submit',
     'Vol': 'vol',
     "Vol Phone": 'phone',
+    "Org": 'org',
+    'Vol Desc': 'vol_desc',
     "Submit Email": 'email',
     "#PPL": 'num',
     "Address": 'addr',
@@ -103,25 +109,61 @@ for ( const [col, attr] of Object.entries(col_map) ) {
   attr_map[attr] = col;
 }
 
+var lineCounter = 0;
+function openFwdHeader(fromLine) {
+  lineCounter = 0;
+  return fromLine;
+}
+function fwdID(subjectLine) {
+  return parseInt(subjectLine);
+}
+
+function dateIfFwd(dateLine) {
+  if (lineCounter < 10) { // if we're within 10 lines of a From lahsa, this is probably the "true" date in a forward
+    dateLine = dateLine.replace(' at ', ' ');
+    return new Date(dateLine);
+  }
+  return null;
+}
+
+function fwdType(typeStr) {
+  if (typeStr.toLowerCase() === 'new') {
+    return NotificationType.NEW;
+  } else if (typeStr.toLowerCase() === 'update') {
+    return NotificationType.UPDATE;
+  } else if (typeStr.toLowerCase() === 'received') {
+    return NotificationType.RECEIVED;
+  }
+  return NotificationType.UNKNOWN;
+}
+
+function toDate(dateStr) {
+  return new Date(dateStr);
+}
+
 // component regexes
 // Can be of the format attribute name: [ regex1, regex2 ] and/or attribute name: [ [regex, validate func], ... ]
 // if using a validation function, it must return null if validation failed and the final value to use if validation was successful
 var attr_re = {
-    'addr': [[/<p><strong>Address: <\/strong>(.*)<\/p>/, validateTextField]],
-    'location': [[/<p><strong>Description of location: <\/strong>(.*)<\/p>/, validateTextField]],
-    'time': [/<p><strong>Date last seen: <\/strong>(.*)<\/p>/],
-    'num': [/<p><strong>Number of people: <\/strong>(\d+)<\/p>/],
-    'name': [[/<p><strong>Name of person\/people requiring outreach: <\/strong>(.*)<\/p>/, validateTextField]],
-    'desc': [[/<p><strong>Physical description of person\/people: <\/strong>(.*)<\/p>/, validateTextField]],
-    'needs': [[/<p><strong>Description of person\/people's needs: <\/strong>(.*)<\/p>/, validateTextField]],
-    'vol': [[/<p><strong>Your name: <\/strong>(.*)<\/p>/, validateTextField]],
-    'org': [[/<p><strong>Company\/organization: <\/strong>(.*)<\/p>/, validateTextField]],
-    'vol_desc': [[/<p><strong>How would you describe yourself? <\/strong>(.*)<\/p>/, validateTextField]],
+    'addr': [[/>Address: <\/strong>([^<>]*)<\/p>/, validateTextField]],
+    'location': [[/>Description of location: <\/strong>([^<>]*)<\/p>/, validateTextField]],
+    'last_seen': [[/>Date last seen: (?:<(?:\/)*(?:[^<>]*)>)*([ -,.:\/A-Za-z0-9]*)<\/p>/, toDate]],
+    'num': [/>Number of people: <\/strong>(\d+)<\/p>/],
+    'name': [[/>Name of person\/people requiring outreach: <\/strong>([^<>]*)<\/p>/, validateTextField]],
+    'desc': [[/>Physical description of person\/people: <\/strong>([^<>]*)<\/p>/, validateTextField]],
+    'needs': [[/>Description of person\/people's needs: <\/strong>([^<>]*)<\/p>/, validateTextField]],
+    'vol': [[/>Your name: <\/strong>([^<>]*)<\/p>/, validateTextField]],
+    'org': [[/>Company\/organization: <\/strong>([^<>]*)<\/p>/, validateTextField]],
+    'vol_desc': [[/>How would you describe yourself\? <\/strong>([^<>]*)<\/p>/, validateTextField]],
     'email': [
-      [/<p><strong>Email: <\/strong>(.*)<\/p>/, validateEmail],
-      [/<p><strong>Email: <\/strong><a.*>(.*)<\/a><\/p>/, validateEmail]
+      [/>Email: <\/strong>([^<>]*)<\/p>/, validateEmail],
+      [/>Email: <\/strong><a.*>(.*)<\/a><\/p>/, validateEmail]
     ],
-    'phone': [/<p><strong>Phone: <\/strong>(.*)<\/p>/]
+    'phone': [/>Phone: <\/strong>([^<>]*)<\/p>/],
+    'fwd_frm': [[/From: .*(donotreply@lahsa.org).*/, openFwdHeader]],
+    'fwd_orig_date': [[/Date: (?:<(?:\/)*(?:[^<>]*)>)*([ -,.:\/A-Za-z0-9]*)/, dateIfFwd]],  // the original date of the message from LAHSA if this email was forwarded to us
+    'fwd_id': [[/Subject: Outreach Request \*[a-zA-z]+\* \(Request ID: (.*)\)/, fwdID]],
+    'fwd_type': [[/Subject: Outreach Request \*([a-zA-z]+)\*/, fwdType]]
 };
 
 var fwd_table = {};
@@ -143,8 +185,6 @@ function letterToColumn(letter) {
   }
   return column;
 }
-
-//DATE_TIME_RE = /(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{1,2})(.*) (A|P)M/;
 
 const NotificationType = Object.freeze({"NEW":1, "UPDATE":2, "RECEIVED":3, "UNKNOWN": 4});
 const Status = Object.freeze({"UNRESOLVED":1, "FAILED":2, "SUCCESS":3, "DISMISSED": 4, 'UNCATEGORIZED': 5});
@@ -265,12 +305,18 @@ function logHOPs() {
                     newestTime = msgs[j].getDate();
                 }
                 let msgAttrs = processMessage(msgs[j]);
+                console.log(msgAttrs.needs);
                 if (msgAttrs) {
-                  if (msgAttrs.id === 31234) {
-                    console.log(msgAttrs);
-                  }
                   thread.addLabel(hopLabel);
                   msgAttrs.fwd = !accountEmails.includes(msgAttrs.email);
+                  if (msgAttrs.fwd && msgAttrs.fwd_orig_date) {
+                    console.log(`${msgAttrs.id}: ${msgAttrs.fwd_type} ${msgAttrs.fwd_orig_date}`);
+                    if (msgAttrs.fwd_type === NotificationType.NEW) {
+                      msgAttrs.submit = msgAttrs.fwd_orig_date;
+                    } else {
+                      msgAttrs.last_update = msgAttrs.fwd_orig_date;
+                    }
+                  }
                   if (!hops.hasOwnProperty(msgAttrs.id)) {
                       hops[msgAttrs.id] = msgAttrs;
                   } else {
@@ -319,7 +365,7 @@ function setAttribute(regexes, line, parts, attr) {
         validate = rex[1];
         rex = rex[0];
       }
-      let mtch = rex.exec(line);
+      let mtch = line.match(rex);
       if (mtch !== null && mtch.length >= 2) {
           if (validate) {
             parts[attr] = validate(mtch[1]);
@@ -337,7 +383,8 @@ function processMessage(msg) {
     let parts = {
         'last_update': msg.getDate(), // TODO this wont do for forwards!!
         'type': NotificationType.UNKNOWN,
-        'status': Status.UNRESOLVED
+        'status': Status.UNRESOLVED,
+        'submit': null
     };
     for (const key in attr_re) {
         parts[key] = null;
@@ -349,17 +396,21 @@ function processMessage(msg) {
     }
     if (msg.getSubject().includes('New')) {
         parts.type = NotificationType.NEW;
+        parts.submit = msg.getDate();
     } else if (msg.getSubject().includes('Update')) {
         parts.type = NotificationType.UPDATE;
     } else if (msg.getSubject().includes('received')) {
         parts.type = NotificationType.RECEIVED;
+        parts.submit = msg.getDate(); //TODO correct?
     }
 
     parts.id = parseInt(sub[1]);
     let lines = msg.getBody().split('\n');
     for (let idx=0; idx < lines.length; idx++) {
-        for (const attr in attr_re) {
-            if (setAttribute(attr_re[attr], lines[idx], parts, attr)) continue;
+        lineCounter++;
+        for (const [attr, regexes] of Object.entries(attr_re)) {
+            if (parts[attr] != null) continue;
+            setAttribute(regexes, lines[idx], parts, attr);
         }
         if (parts.type !== NotificationType.NEW && parts.status === Status.UNRESOLVED) {
             if (lines[idx].includes('unable to make contact') || lines[idx].includes('unable to locate the individual')) {
@@ -375,14 +426,6 @@ function processMessage(msg) {
       parts.status = Status.UNCATEGORIZED;
     }
     if (parts.time !== null && typeof parts.time === 'string') {
-        /*let dt = DATE_TIME_RE.exec(parts.time);
-        parts.time = new Date(
-            parseInt(dt[3]),
-            parseInt(dt[1])-1,
-            parseInt(dt[2]),
-            parseInt(dt[4]) + (dt[6] === 'P' ? 12 : 0),
-            parseInt(dt[5])
-        );*/
         // timezone might be wrong here, but thats ok we only use this for ordering, TZ not displayed in sheet
         parts.time = new Date(parts.time);
     }
@@ -453,7 +496,7 @@ function needsUpdates(oldestNewHop) {
   /**
    * Determine if some new hops need to be inserted between existing rows on the spreadsheet. This could happen if people forward HOPs later.
    */
-  return oldestNewHop < new Date(HOP_SHEET.getRange(`${columnToLetter(columns['Origin Date'])}2:${columnToLetter(columns['Origin Date'])}2`).getValue());
+  return oldestNewHop < new Date(HOP_SHEET.getRange(`${columnToLetter(columns['Last Seen'])}2:${columnToLetter(columns['Last Seen'])}2`).getValue());
 }
 
 function doRandomInserts(rows) {
@@ -462,20 +505,12 @@ function doRandomInserts(rows) {
    *
    * Returns a list of all new HOPs that were not inserted.
    */
-  /*getSheet();
-  rows = [];
-  var now = new Date();
-  for (const month of [11, 10, 9, 8, 7, 6, 5, 4]) {
-    rows.push(Array.apply(null, Array(14)).map(function (x, i) { return null; }));
-    rows[rows.length-1][3] = new Date(now.getFullYear(), month, now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds());
-  }*/
-
   if (rows.length > 0) {
-    var mark = new Date(HOP_SHEET.getRange(`${columnToLetter(columns['Origin Date'])}2:${columnToLetter(columns['Origin Date'])}2`).getValue());
+    var mark = new Date(HOP_SHEET.getRange(`${columnToLetter(columns['Last Seen'])}2:${columnToLetter(columns['Last Seen'])}2`).getValue());
     var randomInserts = [];
     var rows2 = [];
     for (const hop of rows.reverse()) {
-      if (hop[columns['Origin Date']-1] >= mark) {
+      if (hop[columns['Last Seen']-1] >= mark) {
         rows2.unshift(hop);
       } else {
         randomInserts.unshift(hop);
@@ -484,13 +519,13 @@ function doRandomInserts(rows) {
     rows = rows2;
     // this is an O(n) operation but thats fine for now. On a big sheet this might get annoying, HOPs are submitted at a rate of about 50/day
     if (randomInserts.length > 0) {
-      var times = HOP_SHEET.getRange(`${columnToLetter(columns['Origin Date'])}:${columnToLetter(columns['Origin Date'])}`).getValues().slice(1);
+      var times = HOP_SHEET.getRange(`${columnToLetter(columns['Last Seen'])}:${columnToLetter(columns['Last Seen'])}`).getValues().slice(1);
       var randomIdx = 0;
       var timeRow = 2;
       for (var time of times) {
         time = new Date(time);
         if (!isNaN(time.getTime())) {
-          while (randomInserts.length > randomIdx && randomInserts[randomIdx][columns['Origin Date']-1] >= time) {
+          while (randomInserts.length > randomIdx && randomInserts[randomIdx][columns['Last Seen']-1] >= time) {
             var insertRange = HOP_SHEET.getRange(`A${timeRow}:${columnToLetter(randomInserts[randomIdx].length)}${timeRow}`);
             insertRange.insertCells(SpreadsheetApp.Dimension.ROWS);
             insertRange.setValues([randomInserts[randomIdx]]);
@@ -506,11 +541,11 @@ function doRandomInserts(rows) {
   return rows;
 }
 
-function submissionOrderDescending(row1, row2) {
-  if (row1[columns['Origin Date']-1] < row2[columns['Origin Date']-1]) {
+function incidentOrderDescending(row1, row2) {
+  if (row1[columns['Last Seen']-1] < row2[columns['Last Seen']-1]) {
     return 1;
   }
-  else if (row1[columns['Origin Date']-1] > row2[columns['Origin Date']-1]) {
+  else if (row1[columns['Last Seen']-1] > row2[columns['Last Seen']-1]) {
     return -1;
   }
   return 0;
@@ -532,11 +567,11 @@ function writeHOPs(hops) {
   for (const [hop_id, hop] of Object.entries(hops)) {
     rows.push(toRow(hop));
   }
-  rows.sort(submissionOrderDescending);
+  rows.sort(incidentOrderDescending);
 
   if (rows.length > 0) {
     // first pass, search for HOPs by ID in sheet and update the found ones
-    if (needsUpdates(rows[rows.length-1][columns['Origin Date']-1])) {
+    if (needsUpdates(rows[rows.length-1][columns['Last Seen']-1])) {
       var remaining = [];
       var existing = {};
       var hidx = 1;
@@ -551,9 +586,9 @@ function writeHOPs(hops) {
         if (existing.hasOwnProperty(hid)) {
           var range = HOP_SHEET.getRange(`${existing[hid]}:${existing[hid]}`)
           var current = range.getValues()[0];
-          if (hop[columns['Last Update']-1] > new Date(current[columns['Last Update']-1])) {
+          if (hop[columns['Last Update']-1] >= new Date(current[columns['Last Update']-1])) {
             var vidx = 0;
-            for (const val in hop) {
+            for (const val of hop) {
               if (val != null) {
                 current[vidx] = val;
               }
@@ -564,7 +599,6 @@ function writeHOPs(hops) {
         } else {
           remaining.push(hop);
         }
-        row++;
       }
       // add any missing HOPS between existing rows in the table
       rows = doRandomInserts(remaining);
