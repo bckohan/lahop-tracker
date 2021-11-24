@@ -8,9 +8,11 @@ var HOP_LABEL = 'HOP';       // tag HOP emails with this label in gmail
 ///////////////////////////////////////////////////////////////////////
 
 
-// DONT CHANGE ANYTHING BELOW THIS UNLESS YOU KNOW WHAT YOURE DOING
+// DONT CHANGE ANYTHING BELOW THIS UNLESS YOU KNOW WHAT YOURE DOING - Parsing these emails is *tricky*, especially when trying to account for all the weird formatting issues different email clients introduce when messages are forwarded
 // this is the search string as you would type it into Gmail search
-var HOP_QUERY = 'subject: Outreach Request'; //'from: donotreply@lahsa.org subject: Outreach Request';
+// The BEST search for finding all HOPs on an email where that email is the account of record with LAHSA is:
+//     'from: donotreply@lahsa.org subject: Outreach Request';
+var HOP_QUERY = 'subject: Outreach Request';
 var SUBJ_RE = /\(Request ID: (\d+)\)/;
 var LAST_SYNC = null;
 var HOP_SHEET = null;
@@ -109,17 +111,17 @@ for ( const [col, attr] of Object.entries(col_map) ) {
   attr_map[attr] = col;
 }
 
-var lineCounter = 0;
-function openFwdHeader(fromLine) {
-  lineCounter = 0;
+var fwdFromIDX = null;
+function openFwdHeader(fromLine, str) {
+  fwdFromIDX = str.indexOf(fromLine);
   return fromLine;
 }
 function fwdID(subjectLine) {
   return parseInt(subjectLine);
 }
 
-function dateIfFwd(dateLine) {
-  if (lineCounter < 10) { // if we're within 10 lines of a From lahsa, this is probably the "true" date in a forward
+function dateIfFwd(dateLine, str) {
+  if (Math.abs(fwdFromIDX - str.indexOf(dateLine)) < 1000) { // we need to be close-ish to the from forward line
     dateLine = dateLine.replace(' at ', ' ');
     return new Date(dateLine);
   }
@@ -151,7 +153,7 @@ var attr_re = {
     'num': [/>Number of people: <\/strong>(\d+)<\/p>/],
     'name': [[/>Name of person\/people requiring outreach: <\/strong>([^<>]*)<\/p>/, validateTextField]],
     'desc': [[/>Physical description of person\/people: <\/strong>([^<>]*)<\/p>/, validateTextField]],
-    'needs': [[/>Description of person\/people's needs: <\/strong>([^<>]*)<\/p>/, validateTextField]],
+    'needs': [[/>Description of person\/people(?:(?:')|(?:&#39;))s needs: <\/strong>([^<>]*)<\/p>/, validateTextField]],
     'vol': [[/>Your name: <\/strong>([^<>]*)<\/p>/, validateTextField]],
     'org': [[/>Company\/organization: <\/strong>([^<>]*)<\/p>/, validateTextField]],
     'vol_desc': [[/>How would you describe yourself\? <\/strong>([^<>]*)<\/p>/, validateTextField]],
@@ -162,8 +164,8 @@ var attr_re = {
     'phone': [/>Phone: <\/strong>([^<>]*)<\/p>/],
     'fwd_frm': [[/From: .*(donotreply@lahsa.org).*/, openFwdHeader]],
     'fwd_orig_date': [[/Date: (?:<(?:\/)*(?:[^<>]*)>)*([ -,.:\/A-Za-z0-9]*)/, dateIfFwd]],  // the original date of the message from LAHSA if this email was forwarded to us
-    'fwd_id': [[/Subject: Outreach Request \*[a-zA-z]+\* \(Request ID: (.*)\)/, fwdID]],
-    'fwd_type': [[/Subject: Outreach Request \*([a-zA-z]+)\*/, fwdType]]
+    'fwd_id': [[/Subject: (?:<(?:\/)*(?:[^<>]*)>)*Outreach Request \*[a-zA-z]+\* \(Request ID: (.*)\)/, fwdID]],
+    'fwd_type': [[/Subject: (?:<(?:\/)*(?:[^<>]*)>)*Outreach Request \*([a-zA-z]+)\*/, fwdType]]
 };
 
 var fwd_table = {};
@@ -305,17 +307,14 @@ function logHOPs() {
                     newestTime = msgs[j].getDate();
                 }
                 let msgAttrs = processMessage(msgs[j]);
-                console.log(msgAttrs.needs);
                 if (msgAttrs) {
                   thread.addLabel(hopLabel);
                   msgAttrs.fwd = !accountEmails.includes(msgAttrs.email);
                   if (msgAttrs.fwd && msgAttrs.fwd_orig_date) {
-                    console.log(`${msgAttrs.id}: ${msgAttrs.fwd_type} ${msgAttrs.fwd_orig_date}`);
                     if (msgAttrs.fwd_type === NotificationType.NEW) {
                       msgAttrs.submit = msgAttrs.fwd_orig_date;
-                    } else {
-                      msgAttrs.last_update = msgAttrs.fwd_orig_date;
                     }
+                    msgAttrs.last_update = msgAttrs.fwd_orig_date;
                   }
                   if (!hops.hasOwnProperty(msgAttrs.id)) {
                       hops[msgAttrs.id] = msgAttrs;
@@ -350,7 +349,6 @@ function logHOPs() {
         threads = GmailApp.search(HOP_QUERY, start, max);
     }
 
-    //console.info(hops);
     writeHOPs(hops);
 }
 
@@ -366,13 +364,14 @@ function setAttribute(regexes, line, parts, attr) {
         rex = rex[0];
       }
       let mtch = line.match(rex);
-      if (mtch !== null && mtch.length >= 2) {
+      if (mtch != null && mtch.length >= 2) {
           if (validate) {
-            parts[attr] = validate(mtch[1]);
+            parts[attr] = validate(mtch[1], line);
           } else {
             parts[attr] = mtch[1];
           }
           if (parts[attr] == null) continue;
+
           return true;
       }
     }
@@ -380,8 +379,9 @@ function setAttribute(regexes, line, parts, attr) {
 }
 
 function processMessage(msg) {
+    fwdFromIDX = null;
     let parts = {
-        'last_update': msg.getDate(), // TODO this wont do for forwards!!
+        'last_update': msg.getDate(), // this won't do for forwards!!
         'type': NotificationType.UNKNOWN,
         'status': Status.UNRESOLVED,
         'submit': null
@@ -405,21 +405,17 @@ function processMessage(msg) {
     }
 
     parts.id = parseInt(sub[1]);
-    let lines = msg.getBody().split('\n');
-    for (let idx=0; idx < lines.length; idx++) {
-        lineCounter++;
-        for (const [attr, regexes] of Object.entries(attr_re)) {
-            if (parts[attr] != null) continue;
-            setAttribute(regexes, lines[idx], parts, attr);
-        }
-        if (parts.type !== NotificationType.NEW && parts.status === Status.UNRESOLVED) {
-            if (lines[idx].includes('unable to make contact') || lines[idx].includes('unable to locate the individual')) {
-                parts.status = Status.FAILED;
-            } else if (lines[idx].includes('made contact with the individual')) {
-                parts.status = Status.SUCCESS;
-            } else if (lines[idx].includes('already serving the area listed')) {
-                parts.status = Status.DISMISSED;
-            }
+    for (const [attr, regexes] of Object.entries(attr_re)) {
+        if (parts[attr] != null) continue;
+        setAttribute(regexes, msg.getBody(), parts, attr);
+    }
+    if (parts.type !== NotificationType.NEW && parts.status === Status.UNRESOLVED) {
+        if (msg.getBody().includes('unable to make contact') || msg.getBody().includes('unable to locate the individual')) {
+            parts.status = Status.FAILED;
+        } else if (msg.getBody().includes('made contact with the individual')) {
+            parts.status = Status.SUCCESS;
+        } else if (msg.getBody().includes('already serving the area listed')) {
+            parts.status = Status.DISMISSED;
         }
     }
     if (parts.type !== NotificationType.NEW && parts.status === Status.UNRESOLVED) {
