@@ -13,7 +13,7 @@ suggested to devote one gmail address to be the submitter email. All hops should
 that gmail address and this script will run only on that address. HOP submitters should then use their
 own phone number when they submit the HOP. The email forwarding feature of this script lets users
 map their phone number to their email address so any communications from LAHSA regarding that user's
-HOPs may be forwarded to them.
+HOPs will be automatically forwarded to them when this script runs.
 
 ## Setup
 
@@ -31,7 +31,7 @@ same google spreadsheet that logs the HOPs:
    *   ...
    *   n | 5553234444 | someoneelse@example.com
    *
-- Set the script up to run daily, by navigating to "Triggers" (clock icon) and 
+- Set the script up to run daily, by navigating to "Triggers" (clock icon) and creating a new time based trigger.
 
 ## Capturing old HOPs
 
@@ -40,3 +40,5 @@ to individually forward them to the address running this script OR run this scri
 holding the old HOPs. Unfortunately using gmail's bulk forward as attachment feature does not work
 currently for some annoying technical reasons. There may be some add-ons available that provide a
 bulk forwarding feature that works as intended, but I haven't tried them.
+
+In gmail the best way to search for old HOPs submitted by that address is: from: donotreply@lahsa.org subject: outreach request 
