@@ -1,10 +1,10 @@
 /**
  * The following field(s) should be configured to your liking.
  */
-var HOP_SHEET_ID = 'TODO You must fill this in'; // the google spreadsheet ID of the sheet to hold the hop log and forward table
+var HOP_SHEET_ID = '1vfzkKmBUYTy5fn-L4maZXEfN8hlAX1kQDYsvgblWxQA'; // the google spreadsheet ID of the sheet to hold the hop log and forward table
 var SHEET_NAME = 'HOPS';     // name to use for the sheet containing the HOP log
 var FWD_SHEET = 'Forwards';  // this should be set to the name of the sheet in the spreadsheet that holds the forward table
-var HOP_LABEL = 'HOP';       // tag HOP emails with this label in gmail
+var HOP_LABEL = GmailApp.createLabel('HOP');       // tag HOP emails with this label in gmail
 ///////////////////////////////////////////////////////////////////////
 
 
@@ -12,14 +12,16 @@ var HOP_LABEL = 'HOP';       // tag HOP emails with this label in gmail
 // this is the search string as you would type it into Gmail search
 // The BEST search for finding all HOPs on an email where that email is the account of record with LAHSA is:
 //     'from: donotreply@lahsa.org subject: Outreach Request';
-var HOP_QUERY = 'subject: Outreach Request';
+var HOP_QUERY = 'subject:"Outreach Request"';
+//var HOP_QUERY = '{subject:"Outreach Request"  subject:hops}';
 var SUBJ_RE = /\(Request ID: (\d+)\)/;
 var LAST_SYNC = null;
 var HOP_SHEET = null;
-var VERSION = 11;  // When the version is incremented all HOPs on the account will be reprocessed!
+var VERSION = 1;  // When the version is incremented all HOPs on the account will be reprocessed!
 var LAST_VERSION = null;
 
 var accountEmails = [Session.getActiveUser().getEmail()].concat(GmailApp.getAliases());
+var hops = {};
 
 function validateEmail(email) {
   /**
@@ -286,7 +288,6 @@ function logHOPs() {
     console.log(`Searching for: "${HOP_QUERY}"`);
 
     getSheet();
-    var hopLabel = GmailApp.createLabel(HOP_LABEL);
     getGlobalMeta();
     buildForwardTable();
     let newestTime = null;
@@ -294,8 +295,6 @@ function logHOPs() {
     let max = 500;
 
     let threads = GmailApp.search(HOP_QUERY, start, max);
-
-    let hops = {};
     while (threads.length>0) {
         for (var i in threads) {
             var thread=threads[i];
@@ -306,41 +305,17 @@ function logHOPs() {
                 if (newestTime === null || msgs[j].getDate() > newestTime) {
                     newestTime = msgs[j].getDate();
                 }
-                let msgAttrs = processMessage(msgs[j]);
-                if (msgAttrs) {
-                  thread.addLabel(hopLabel);
-                  msgAttrs.fwd = !accountEmails.includes(msgAttrs.email);
-                  if (msgAttrs.fwd && msgAttrs.fwd_orig_date) {
-                    if (msgAttrs.fwd_type === NotificationType.NEW) {
-                      msgAttrs.submit = msgAttrs.fwd_orig_date;
-                    }
-                    msgAttrs.last_update = msgAttrs.fwd_orig_date;
+                /*let attachments = msgs[j].getAttachments({includeAttachments: false});
+                if (attachments.length > 0) {
+                  for (const attachment of attachments) {
+                    console.log(attachment.getName());
+                    console.log(attachment.getDataAsString());
+                    return;
+                    let hopAttrs = processMessage(attachment.getName(), attachment.getDataAsString(), msgs[j].getDate());
                   }
-                  if (!hops.hasOwnProperty(msgAttrs.id)) {
-                      hops[msgAttrs.id] = msgAttrs;
-                  } else {
-                      for (const attr in msgAttrs) {
-                          if (attr === 'last_update') {
-                              if (msgAttrs[attr] > hops[msgAttrs.id][attr]) {
-                                  hops[msgAttrs.id][attr] = msgAttrs[attr];
-                                  hops[msgAttrs.id]['status'] = msgAttrs['status'];
-                              }
-                          }
-                          else if (attr === 'status') { continue; }
-                          else if (msgAttrs[attr] !== null) {
-                              hops[msgAttrs.id][attr] = msgAttrs[attr];
-                          }
-                      }
-                  }
-
-                  // forward message if we should
-                  if (!msgAttrs.fwd && LAST_SYNC && msgs[j].getDate() > LAST_SYNC) {
-                    if (fwd_table.hasOwnProperty(msgAttrs.phone)) {
-                      console.log(`Forwarding ${msgAttrs.id} -> ${fwd_table[msgAttrs.phone]}`);
-                      msgs[j].forward(fwd_table[msgAttrs.phone]);
-                    }
-                  }
-                }
+                } else {*/
+                handleHOP(processMessage(msgs[j].getSubject(), msgs[j].getBody(), msgs[j].getDate()), msgs[j], thread);
+                //}
             }
             if (newestTime === null) { break; }  // no messages occurred after LAST_SYNC
         }
@@ -350,6 +325,44 @@ function logHOPs() {
     }
 
     writeHOPs(hops);
+}
+
+function handleHOP(hopAttrs, msg, thread) {
+  if (hopAttrs == null) {
+    return;
+  }
+  thread.addLabel(HOP_LABEL);
+  hopAttrs.fwd = !accountEmails.includes(hopAttrs.email);
+  if (hopAttrs.fwd && hopAttrs.fwd_orig_date) {
+    if (hopAttrs.fwd_type === NotificationType.NEW) {
+      hopAttrs.submit = hopAttrs.fwd_orig_date;
+    }
+    hopAttrs.last_update = hopAttrs.fwd_orig_date;
+  }
+  if (!hops.hasOwnProperty(hopAttrs.id)) {
+      hops[hopAttrs.id] = hopAttrs;
+  } else {
+      for (const attr in hopAttrs) {
+          if (attr === 'last_update') {
+              if (hopAttrs[attr] > hops[hopAttrs.id][attr]) {
+                  hops[hopAttrs.id][attr] = hopAttrs[attr];
+                  hops[hopAttrs.id]['status'] = hopAttrs['status'];
+              }
+          }
+          else if (attr === 'status') { continue; }
+          else if (hopAttrs[attr] !== null) {
+              hops[hopAttrs.id][attr] = hopAttrs[attr];
+          }
+      }
+  }
+
+  // forward message if we should
+  if (!hopAttrs.fwd && LAST_SYNC && msg.getDate() > LAST_SYNC) {
+    if (fwd_table.hasOwnProperty(hopAttrs.phone)) {
+      console.log(`Forwarding ${hopAttrs.id} -> ${fwd_table[hopAttrs.phone]}`);
+      msg.forward(fwd_table[hopAttrs.phone]);
+    }
+  }
 }
 
 function setAttribute(regexes, line, parts, attr) {
@@ -378,43 +391,55 @@ function setAttribute(regexes, line, parts, attr) {
     return false;
 }
 
-function processMessage(msg) {
+function processSubject(subj, receivedDate) {
+  let subAttrs = {};
+  let sub = SUBJ_RE.exec(subj);
+  if (sub === null || sub.length < 2) {
+      console.log('Unable to interpret subject line!');
+      return null;
+  }
+  if (subj.includes('New')) {
+      subAttrs.type = NotificationType.NEW;
+      subAttrs.submit = receivedDate;
+  } else if (subj.includes('Update')) {
+      subAttrs.type = NotificationType.UPDATE;
+  } else if (subj.includes('received')) {
+      subAttrs.type = NotificationType.RECEIVED;
+  }
+
+  subAttrs.id = parseInt(sub[1]);
+  return subAttrs;
+}
+
+function processMessage(subject, message, receivedDate) {
     fwdFromIDX = null;
     let parts = {
-        'last_update': msg.getDate(), // this won't do for forwards!!
-        'type': NotificationType.UNKNOWN,
-        'status': Status.UNRESOLVED,
-        'submit': null
+      'last_update': receivedDate, // this won't do for forwards!!
+      'type': NotificationType.UNKNOWN,
+      'status': Status.UNRESOLVED,
+      'submit': null
     };
     for (const key in attr_re) {
-        parts[key] = null;
+      parts[key] = null;
     }
-    let sub = SUBJ_RE.exec(msg.getSubject());
-    if (sub === null || sub.length < 2) {
-        console.log('Unable to interpret subject line!');
-        return null;
+    let subjAttrs = processSubject(subject, receivedDate);
+    if (subjAttrs == null) {
+      return null;
     }
-    if (msg.getSubject().includes('New')) {
-        parts.type = NotificationType.NEW;
-        parts.submit = msg.getDate();
-    } else if (msg.getSubject().includes('Update')) {
-        parts.type = NotificationType.UPDATE;
-    } else if (msg.getSubject().includes('received')) {
-        parts.type = NotificationType.RECEIVED;
-        parts.submit = msg.getDate(); //TODO correct?
+    for (const [key, val] of Object.entries(subjAttrs)) {
+      parts[key] = val;
     }
 
-    parts.id = parseInt(sub[1]);
     for (const [attr, regexes] of Object.entries(attr_re)) {
         if (parts[attr] != null) continue;
-        setAttribute(regexes, msg.getBody(), parts, attr);
+        setAttribute(regexes, message, parts, attr);
     }
     if (parts.type !== NotificationType.NEW && parts.status === Status.UNRESOLVED) {
-        if (msg.getBody().includes('unable to make contact') || msg.getBody().includes('unable to locate the individual')) {
+        if (message.includes('unable to make contact') || message.includes('unable to locate the individual')) {
             parts.status = Status.FAILED;
-        } else if (msg.getBody().includes('made contact with the individual')) {
+        } else if (message.includes('made contact with the individual')) {
             parts.status = Status.SUCCESS;
-        } else if (msg.getBody().includes('already serving the area listed')) {
+        } else if (message.includes('already serving the area listed')) {
             parts.status = Status.DISMISSED;
         }
     }
@@ -516,21 +541,29 @@ function doRandomInserts(rows) {
     // this is an O(n) operation but thats fine for now. On a big sheet this might get annoying, HOPs are submitted at a rate of about 50/day
     if (randomInserts.length > 0) {
       var times = HOP_SHEET.getRange(`${columnToLetter(columns['Last Seen'])}:${columnToLetter(columns['Last Seen'])}`).getValues().slice(1);
-      var randomIdx = 0;
-      var timeRow = 2;
-      for (var time of times) {
+      let randomIdx = 0;
+      let timeRow = 2;
+      let lastTimeIDX = 1;
+      for (let time of times) {
         time = new Date(time);
         if (!isNaN(time.getTime())) {
           while (randomInserts.length > randomIdx && randomInserts[randomIdx][columns['Last Seen']-1] >= time) {
-            var insertRange = HOP_SHEET.getRange(`A${timeRow}:${columnToLetter(randomInserts[randomIdx].length)}${timeRow}`);
+            let insertRange = HOP_SHEET.getRange(`A${timeRow}:${columnToLetter(randomInserts[randomIdx].length)}${timeRow}`);
             insertRange.insertCells(SpreadsheetApp.Dimension.ROWS);
             insertRange.setValues([randomInserts[randomIdx]]);
             randomIdx++;
             timeRow++;
           }
+          lastTimeIDX = timeRow;
           if (randomInserts.length <= randomIdx) break;
         }
         timeRow++;
+      }
+      if (randomIdx < randomInserts.length) {
+        let toInsert = randomInserts.slice(randomIdx);
+        let insertRange = HOP_SHEET.getRange(`A${lastTimeIDX+1}:${columnToLetter(randomInserts[randomIdx].length)}${lastTimeIDX+(randomInserts.length)}`);
+        insertRange.insertCells(SpreadsheetApp.Dimension.ROWS);
+        insertRange.setValues(toInsert);
       }
     }
   }
@@ -608,3 +641,4 @@ function writeHOPs(hops) {
     }
   }
 }
+
