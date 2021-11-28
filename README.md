@@ -1,5 +1,7 @@
 # lahop-tracker
 
+![Log](./lahop_tracker.png)
+
 A utility that monitors a gmail address for LAHOP request messages and logs the status
 of those HOPs to a Google spreadsheet. This script is in active use and works well, but it does
 take some know-how to get setup and running. If you or your organization would like to use
@@ -27,11 +29,11 @@ The steps to setup this script are broadly:
     - The google sheet ID is the long string of random numbers and letters in the spreadsheet's url
 - If you want to use the forwarding feature, create a sheet called "Forwards" of the following format in the
 same google spreadsheet that logs the HOPs:
-   *   0 | Phone      | Email
-   *   1 | 5558183333 | myemail@example.com
-   *   ...
-   *   n | 5553234444 | someoneelse@example.com
-   *
+      0 | Phone      | Email
+      1 | 5558183333 | myemail@example.com
+      ...
+      n | 5553234444 | someoneelse@example.com
+   
 - Set the script up to run daily, by navigating to "Triggers" (clock icon) and creating a new time based trigger.
 
 ## Capturing old HOPs
