@@ -22,7 +22,7 @@ The steps to setup this script are broadly:
 - Login to your gmail/google account.
 - Navigate to https://script.google.com/
 - Create a new project called LA HOP Tracker (or whatever)
-- Copy and paste trackHops.gs into code.gs in the script editor
+- Copy and paste the contents of trackHops.gs into code.gs in the script editor
 - Change this line: var HOP_SHEET_ID = ''; to var HOP_SHEET_ID = 'ID of your google spreadsheet';
     - The google sheet ID is the long string of random numbers and letters in the spreadsheet's url
 - If you want to use the forwarding feature, create a sheet called "Forwards" of the following format in the
