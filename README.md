@@ -19,6 +19,7 @@ HOPs will be automatically forwarded to them when this script runs.
 
 The steps to setup this script are broadly:
 
+- Login to your gmail/google account.
 - Navigate to https://script.google.com/
 - Create a new project called LA HOP Tracker (or whatever)
 - Copy and paste trackHops.gs into code.gs in the script editor
