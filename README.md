@@ -41,4 +41,4 @@ holding the old HOPs. Unfortunately using gmail's bulk forward as attachment fea
 currently for some annoying technical reasons. There may be some add-ons available that provide a
 bulk forwarding feature that works as intended, but I haven't tried them.
 
-In gmail the best way to search for old HOPs submitted by that address is: from: donotreply@lahsa.org subject: outreach request 
+In gmail the best way to search for old HOPs submitted by that address is: `from: donotreply@lahsa.org subject: outreach request`
