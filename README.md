@@ -45,3 +45,7 @@ currently for some annoying technical reasons. There may be some add-ons availab
 bulk forwarding feature that works as intended, but I haven't tried them.
 
 In gmail the best way to search for old HOPs submitted by that address is: `from: donotreply@lahsa.org subject: outreach request`
+
+## Formatting and Spreadsheet Customization
+
+The script is robust to adding, rearranging or renaming columns. So feel free to do that. The script does no formatting itself, so apply whatever formatting you like.
