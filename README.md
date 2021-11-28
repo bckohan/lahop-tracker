@@ -30,11 +30,10 @@ The steps to setup this script are broadly:
 - If you want to use the forwarding feature, create a sheet called "Forwards" of the following format in the
 same google spreadsheet that logs the HOPs:
 
-      |  0  | Phone      | Email                   |
+      |  1  | Phone      | Email                   |
       |-----|------------|-------------------------|
-      |  1  | 5558183333 | myemail@example.com     |
-      | ... |            |                         |
-      |  n  | 5553234444 | someoneelse@example.com |
+      |  2  | 5558183333 | myemail@example.com     |
+      |  3  | 5553234444 | someoneelse@example.com |
    
 - Set the script up to run daily, by navigating to "Triggers" (clock icon) and creating a new time based trigger.
 
