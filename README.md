@@ -31,7 +31,7 @@ The steps to setup this script are broadly:
 same google spreadsheet that logs the HOPs:
 
       |  0  | Phone      | Email                   |
-      |-----|:----------:|------------------------:|
+      |-----|------------|-------------------------|
       |  1  | 5558183333 | myemail@example.com     |
       | ... |            |                         |
       |  n  | 5553234444 | someoneelse@example.com |
