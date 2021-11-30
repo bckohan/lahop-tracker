@@ -43,12 +43,12 @@ same google spreadsheet that logs the HOPs:
 
 This script can log individually forwarded HOPs. If you want to read in old HOPs you will have
 to individually forward them to the address running this script OR run this script on the address(es)
-holding the old HOPs OR run the forwardHOPS.gs script on each address holding HOP messages to forward.
+holding the old HOPs OR run the forwardHops.gs script on each address holding HOP messages to forward.
 Unfortunately using gmail's bulk forward as attachment feature does not work
 currently for some annoying technical reasons. There may be some add-ons available that provide a
 bulk forwarding feature that works as intended, but I haven't tried them.
 
-In gmail the best way to search for old HOPs submitted by that address is: `from: donotreply@lahsa.org subject: outreach request`
+In gmail the best way to search for old HOPs is: `from: donotreply@lahsa.org subject: outreach request`
 
 ### forwardHops.gs
 
