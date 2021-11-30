@@ -26,7 +26,7 @@ The steps to setup this script are broadly:
 - Login to your gmail/google account.
 - Navigate to https://script.google.com/
 - Create a new project called LA HOP Tracker (or whatever)
-- Copy and paste the contents of trackHops.gs into code.gs in the script editor
+- Copy and paste the contents of (trackHops.gs)[https://github.com/bckohan/lahop-tracker/blob/main/trackHops.gs] into code.gs in the script editor
 - Change this line: var HOP_SHEET_ID = ''; to var HOP_SHEET_ID = 'ID of your google spreadsheet';
     - The google sheet ID is the long string of random numbers and letters in the spreadsheet's url
 - If you want to use the forwarding feature, create a sheet called "Forwards" of the following format in the
@@ -37,20 +37,20 @@ same google spreadsheet that logs the HOPs:
       |  2  | 5558183333 | myemail@example.com     |
       |  3  | 5553234444 | someoneelse@example.com |
    
-- Set the script up to run daily, by navigating to "Triggers" (clock icon) and creating a new time based trigger.
+- Set the script up to run daily, by navigating to "Triggers" (clock icon) and creating a new time based trigger. Select `logHops` as the function to run.
 
 ## Capturing old HOPs
 
 This script can log individually forwarded HOPs. If you want to read in old HOPs you will have
 to individually forward them to the address running this script OR run this script on the address(es)
-holding the old HOPs OR run the forwardHops.gs script on each address holding HOP messages to forward.
+holding the old HOPs OR run the [forwardHops.gs](https://github.com/bckohan/lahop-tracker/blob/main/forwardHops.gs) script on each address holding HOP messages to forward.
 Unfortunately using gmail's bulk forward as attachment feature does not work
 currently for some annoying technical reasons. There may be some add-ons available that provide a
 bulk forwarding feature that works as intended, but I haven't tried them.
 
 In gmail the best way to search for old HOPs is: `from: donotreply@lahsa.org subject: outreach request`
 
-### forwardHops.gs
+### [forwardHops.gs](https://github.com/bckohan/lahop-tracker/blob/main/forwardHops.gs)
 
 This script finds every HOP sent where the current email address was the address of record on the HOP and does two things:
 
