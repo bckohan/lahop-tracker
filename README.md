@@ -36,7 +36,8 @@ same google spreadsheet that logs the HOPs:
       |-----|------------|-------------------------|
       |  2  | 5558183333 | myemail@example.com     |
       |  3  | 5553234444 | someoneelse@example.com |
-   
+      
+- Run the script once manually. In the dropdown to the right of the `Debug` button, select `logHops` then hit the `Run` button.
 - Set the script up to run daily, by navigating to "Triggers" (clock icon) and creating a new time based trigger. Select `logHops` as the function to run.
 
 ## Capturing old HOPs
