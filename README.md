@@ -1,4 +1,6 @@
-# lahop-tracker
+# LA-HOP Tracker
+
+**IF YOU WANT TO USE THIS TOOL PLEASE [FILL OUT THIS FORM](https://docs.google.com/forms/d/1a6rOii5MONQSlbHpghopkAFF-Wb70R29dj9kAUEMkt4) TO GET SUPPORT: **
 
 ![Log](./lahop_tracker.png)
 
@@ -10,8 +12,8 @@ I will reach out and assist with any setup issues. Even if you don't require hel
 out the form anyway to get notified of updates.
 
 ## Suggested Operation
-If using this tracker as part of an organization where multiple people will be submitting HOPs, its
-suggested to devote one gmail address to be the submitter email. All hops should be submitted using
+If using this tracker as part of an organization where multiple people will be submitting HOPs, I
+suggest devoting one gmail address to be the submitter email. All hops should be submitted using
 that gmail address and this script will run only on that address. HOP submitters should then use their
 own phone number when they submit the HOP. The email forwarding feature of this script lets users
 map their phone number to their email address so any communications from LAHSA regarding that user's
@@ -41,11 +43,19 @@ same google spreadsheet that logs the HOPs:
 
 This script can log individually forwarded HOPs. If you want to read in old HOPs you will have
 to individually forward them to the address running this script OR run this script on the address(es)
-holding the old HOPs. Unfortunately using gmail's bulk forward as attachment feature does not work
+holding the old HOPs OR run the forwardHOPS.gs script on each address holding HOP messages to forward.
+Unfortunately using gmail's bulk forward as attachment feature does not work
 currently for some annoying technical reasons. There may be some add-ons available that provide a
 bulk forwarding feature that works as intended, but I haven't tried them.
 
 In gmail the best way to search for old HOPs submitted by that address is: `from: donotreply@lahsa.org subject: outreach request`
+
+### forwardHops.gs
+
+This script finds every HOP sent where the current email address was the address of record on the HOP and does two things:
+
+* tags the thread with the HOP tag
+* forwards each message in the thread to the configured address
 
 ## Formatting and Spreadsheet Customization
 
