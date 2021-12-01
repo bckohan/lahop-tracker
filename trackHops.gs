@@ -1,7 +1,7 @@
 /**
  * The following field(s) should be configured to your liking.
  */
-var HOP_SHEET_ID = ''; // the google spreadsheet ID of the sheet to hold the hop log and forward table
+var HOP_SHEET_ID = '1vfzkKmBUYTy5fn-L4maZXEfN8hlAX1kQDYsvgblWxQA'; // the google spreadsheet ID of the sheet to hold the hop log and forward table
 var SHEET_NAME = 'HOPS';     // name to use for the sheet containing the HOP log
 var FWD_SHEET = 'Forwards';  // this should be set to the name of the sheet in the spreadsheet that holds the forward table
 var HOP_LABEL = GmailApp.createLabel('HOP');       // tag HOP emails with this label in gmail
@@ -164,10 +164,10 @@ var attr_re = {
       [/>Email: <\/strong><a.*>(.*)<\/a><\/p>/, validateEmail]
     ],
     'phone': [/>Phone: <\/strong>([^<>]*)<\/p>/],
-    'fwd_frm': [[/From: .*(donotreply@lahsa.org).*/, openFwdHeader]],
-    'fwd_orig_date': [[/Date: (?:<(?:\/)*(?:[^<>]*)>)*([ -,.:\/A-Za-z0-9]*)/, dateIfFwd]],  // the original date of the message from LAHSA if this email was forwarded to us
-    'fwd_id': [[/Subject: (?:<(?:\/)*(?:[^<>]*)>)*Outreach Request \*[a-zA-z]+\* \(Request ID: (.*)\)/, fwdID]],
-    'fwd_type': [[/Subject: (?:<(?:\/)*(?:[^<>]*)>)*Outreach Request \*([a-zA-z]+)\*/, fwdType]]
+    'fwd_frm': [[/From:.*(donotreply@lahsa.org).*/, openFwdHeader]],
+    'fwd_orig_date': [[/Date:[ ]*(?:<(?:\/)*(?:[^<>]*)>)*([ -,.:\/A-Za-z0-9]*)/, dateIfFwd]],  // the original date of the message from LAHSA if this email was forwarded to us
+    'fwd_id': [[/Subject:[ ]*(?:<(?:\/)*(?:[^<>]*)>)*[ ]*Outreach Request \*[a-zA-z]+\* \(Request ID: (.*)\)/, fwdID]],
+    'fwd_type': [[/Subject:[ ]*(?:<(?:\/)*(?:[^<>]*)>)*[ ]*Outreach Request \*([a-zA-z]+)\*/, fwdType]]
 };
 
 var fwd_table = {};
@@ -331,6 +331,7 @@ function handleHOP(hopAttrs, msg, thread) {
   if (hopAttrs == null) {
     return;
   }
+  console.info(`Handling: ${msg.getSubject()}`);
   thread.addLabel(HOP_LABEL);
   hopAttrs.fwd = !accountEmails.includes(hopAttrs.email);
   if (hopAttrs.fwd && hopAttrs.fwd_orig_date) {
@@ -641,4 +642,3 @@ function writeHOPs(hops) {
     }
   }
 }
-
