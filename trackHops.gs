@@ -1,7 +1,7 @@
 /**
  * The following field(s) should be configured to your liking.
  */
-var HOP_SHEET_ID = '1vfzkKmBUYTy5fn-L4maZXEfN8hlAX1kQDYsvgblWxQA'; // the google spreadsheet ID of the sheet to hold the hop log and forward table
+var HOP_SHEET_ID = 'TODO CUSTOMIZE THIS'; // the google spreadsheet ID of the sheet to hold the hop log and forward table
 var SHEET_NAME = 'HOPS';     // name to use for the sheet containing the HOP log
 var FWD_SHEET = 'Forwards';  // this should be set to the name of the sheet in the spreadsheet that holds the forward table
 var HOP_LABEL = GmailApp.createLabel('HOP');       // tag HOP emails with this label in gmail
