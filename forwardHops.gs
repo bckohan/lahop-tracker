@@ -1,8 +1,8 @@
 /**
  * The following field(s) should be configured to your liking.
  */
-var HOP_LABEL = GmailApp.createLabel('HOP');       // tag HOP emails with this label in gmail
 var FORWARD_TO = 'TODO Put The Hop tracker email here!';
+var HOP_LABEL = GmailApp.createLabel('HOP');       // tag HOP emails with this label in gmail
 ///////////////////////////////////////////////////////////////////////
 
 var HOP_QUERY = 'from: donotreply@lahsa.org subject: Outreach Request';
