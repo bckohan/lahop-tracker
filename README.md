@@ -58,7 +58,7 @@ This script finds every HOP sent where the current email address was the address
 * tags the thread with the HOP tag
 * forwards each message in the thread to the configured address
 
-To use this script, login to the email address holding the HOPs to forward and navigate to https://script.google.com/. Create a project called "Forward Hops" (or whaterver) and paste the forwardHops.gs code into the editor. Edit the FORWARD_TO address at the top of the file and hit the run button. Only run this script once for each address.
+To use this script, login to the email address holding the HOPs to forward and navigate to https://script.google.com/. Create a project called "Forward Hops" (or whaterver) and paste the [forwardHops.gs](https://github.com/bckohan/lahop-tracker/blob/main/forwardHops.gs) code into the editor. Edit the FORWARD_TO address at the top of the file and hit the run button. Only run this script once for each address.
 
 ## Formatting and Spreadsheet Customization
 
