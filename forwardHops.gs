@@ -3,10 +3,11 @@
  */
 var FORWARD_TO = 'TODO Put The Hop tracker email here!';
 var HOP_LABEL = GmailApp.createLabel('HOP');       // tag HOP emails with this label in gmail
+var MAX_HOP_ID = null;
 ///////////////////////////////////////////////////////////////////////
 
 var HOP_QUERY = 'from: donotreply@lahsa.org subject: Outreach Request';
-
+var SUBJ_RE = /\(Request ID: (\d+)\)/;
 
 // Main function, the one that you must select before run
 function forwardHOPs() {
@@ -26,6 +27,9 @@ function forwardHOPs() {
             for (const msg of msgs) {
               if (!msg.getFrom().includes('donotreply@lahsa.org')) {
                 continue;
+              }
+              if (START_HOP_ID !== null && parseInt(SUBJ_RE.exec(subj))[1] > MAX_HOP_ID) {
+                 continue;
               }
               let dt = `${msg.getDate().toDateString()} at ${msg.getDate().toLocaleTimeString('en-us', { timeZoneName: 'short' })}`;
               let fwdHeaderPlain = `---------- Forwarded message ---------\nFrom: LAHSA <donotreply@lahsa.org>\nDate: ${dt}\nSubject: ${msg.getSubject()}\nTo: ${msg.getTo()}\n`;
