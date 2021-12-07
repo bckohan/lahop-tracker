@@ -17,7 +17,7 @@ var HOP_QUERY = 'subject:"Outreach Request"';
 var SUBJ_RE = /\(Request ID: (\d+)\)/;
 var LAST_SYNC = null;
 var HOP_SHEET = null;
-var VERSION = 1;  // When the version is incremented all HOPs on the account will be reprocessed!
+var VERSION = 7;  // When the version is incremented all HOPs on the account will be reprocessed!
 var LAST_VERSION = null;
 
 var accountEmails = [Session.getActiveUser().getEmail()].concat(GmailApp.getAliases());
@@ -123,7 +123,7 @@ function fwdID(subjectLine) {
 }
 
 function dateIfFwd(dateLine, str) {
-  if (Math.abs(fwdFromIDX - str.indexOf(dateLine)) < 1000) { // we need to be close-ish to the from forward line
+  if (str.indexOf(dateLine) < 1000) { // we need to be close-ish to the from forward line
     dateLine = dateLine.replace(' at ', ' ');
     return new Date(dateLine);
   }
@@ -166,8 +166,8 @@ var attr_re = {
     'phone': [/>Phone: <\/strong>([^<>]*)<\/p>/],
     'fwd_frm': [[/From:.*(donotreply@lahsa.org).*/, openFwdHeader]],
     'fwd_orig_date': [[/Date:[ ]*(?:<(?:\/)*(?:[^<>]*)>)*([ -,.:\/A-Za-z0-9]*)/, dateIfFwd]],  // the original date of the message from LAHSA if this email was forwarded to us
-    'fwd_id': [[/Subject:[ ]*(?:<(?:\/)*(?:[^<>]*)>)*[ ]*Outreach Request \*[a-zA-z]+\* \(Request ID: (.*)\)/, fwdID]],
-    'fwd_type': [[/Subject:[ ]*(?:<(?:\/)*(?:[^<>]*)>)*[ ]*Outreach Request \*([a-zA-z]+)\*/, fwdType]]
+    'fwd_id': [[/Subject:[ ]*(?:<(?:\/)*(?:[^<>]*)>)*[ ]*Outreach Request \*?[a-zA-z]+\*? \(Request ID: (.*)\)/, fwdID]],
+    'fwd_type': [[/Subject:[ ]*(?:<(?:\/)*(?:[^<>]*)>)*[ ]*Outreach Request \*?([a-zA-z]+)\*?/, fwdType]]
 };
 
 var fwd_table = {};
@@ -191,7 +191,7 @@ function letterToColumn(letter) {
 }
 
 const NotificationType = Object.freeze({"NEW":1, "UPDATE":2, "RECEIVED":3, "UNKNOWN": 4});
-const Status = Object.freeze({"UNRESOLVED":1, "FAILED":2, "SUCCESS":3, "DISMISSED": 4, 'UNCATEGORIZED': 5});
+const Status = Object.freeze({"UNRESOLVED":1, "FAILED":2, "SUCCESS":3, "PREEMPTED": 4, "DUPLICATE": 5, 'UNCATEGORIZED': 6});
 var StatusReverse = {};
 for (const [status, code] of Object.entries(Status)) {
   StatusReverse[code] = status;
@@ -366,10 +366,10 @@ function handleHOP(hopAttrs, msg, thread) {
   }
 }
 
-function setAttribute(regexes, line, parts, attr) {
+function setAttribute(regexes, message, parts, attr) {
   /**
-   * The core parsing logic. For the line, run through all regexes from the attr_re table and if any match and pass validation set that
-   * attribute on the message and return true for success. If the line matches no attributes return false.
+   * The core parsing logic. For the message, run through all regexes from the attr_re table and if any match and pass validation set that
+   * attribute on the message and return true for success. If the message matches no attributes return false.
    */
     for (var rex of regexes) {
       var validate = null;
@@ -377,10 +377,15 @@ function setAttribute(regexes, line, parts, attr) {
         validate = rex[1];
         rex = rex[0];
       }
-      let mtch = line.match(rex);
+      let to_search = message;
+      // if this is a forward chain we need to make sure we scrape the right forward headers
+      if (attr.startsWith('fwd') && fwdFromIDX != null) {
+        to_search = message.substr(fwdFromIDX);
+      }
+      let mtch = to_search.match(rex);
       if (mtch != null && mtch.length >= 2) {
           if (validate) {
-            parts[attr] = validate(mtch[1], line);
+            parts[attr] = validate(mtch[1], to_search);
           } else {
             parts[attr] = mtch[1];
           }
@@ -440,8 +445,13 @@ function processMessage(subject, message, receivedDate) {
             parts.status = Status.FAILED;
         } else if (message.includes('made contact with the individual')) {
             parts.status = Status.SUCCESS;
-        } else if (message.includes('already serving the area listed')) {
-            parts.status = Status.DISMISSED;
+        } else if (
+            message.includes('already serving the area listed') ||
+            message.includes('homeless outreach team is already serving the listed location')
+        ) {
+            parts.status = Status.PREEMPTED;
+        } else if (message.includes('already recently received an outreach request')) {
+            parts.status = Status.DUPLICATE;
         }
     }
     if (parts.type !== NotificationType.NEW && parts.status === Status.UNRESOLVED) {
@@ -616,7 +626,8 @@ function writeHOPs(hops) {
         if (existing.hasOwnProperty(hid)) {
           var range = HOP_SHEET.getRange(`${existing[hid]}:${existing[hid]}`)
           var current = range.getValues()[0];
-          if (hop[columns['Last Update']-1] >= new Date(current[columns['Last Update']-1])) {
+          let lastUpdt = new Date(current[columns['Last Update']-1]);
+          if (VERSION > LAST_VERSION || isNaN(lastUpdt.getTime()) || hop[columns['Last Update']-1] >= lastUpdt) {
             var vidx = 0;
             for (const val of hop) {
               if (val != null) {
