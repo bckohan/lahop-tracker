@@ -28,7 +28,7 @@ function forwardHOPs() {
               if (!msg.getFrom().includes('donotreply@lahsa.org')) {
                 continue;
               }
-              if (MAX_HOP_ID !== null && parseInt(SUBJ_RE.exec(subj))[1] > MAX_HOP_ID) {
+              if (MAX_HOP_ID !== null && parseInt(SUBJ_RE.exec(msg.getSubject()))[1] > MAX_HOP_ID) {
                  continue;
               }
               let dt = `${msg.getDate().toDateString()} at ${msg.getDate().toLocaleTimeString('en-us', { timeZoneName: 'short' })}`;
