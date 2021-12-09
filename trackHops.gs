@@ -2,7 +2,7 @@
  * The following field(s) should be configured to your liking.
  */
 var HOP_SHEET_ID = 'TODO SET THIS'; // the google spreadsheet ID of the sheet to hold the hop log and forward table
-var SHEET_NAME = 'HOPS';     // name to use for the sheet containing the HOP log
+var SHEET_NAME = 'HOPs';     // name to use for the sheet containing the HOP log
 var FWD_SHEET = 'Forwards';  // this should be set to the name of the sheet in the spreadsheet that holds the forward table
 var HOP_LABEL = GmailApp.createLabel('HOP');       // tag HOP emails with this label in gmail
 ///////////////////////////////////////////////////////////////////////
@@ -17,7 +17,7 @@ var HOP_QUERY = 'subject:"Outreach Request"';
 var SUBJ_RE = /\((?:(?:Request ID: )|(?:Ticket Id #))(\d+)\)/;
 var LAST_SYNC = null;
 var HOP_SHEET = null;
-var VERSION = 11;  // When the version is incremented all HOPs on the account will be reprocessed!
+var VERSION = 12;  // When the version is incremented all HOPs on the account will be reprocessed!
 var LAST_VERSION = null;
 
 var accountEmails = [Session.getActiveUser().getEmail()].concat(GmailApp.getAliases());
@@ -607,7 +607,8 @@ function logHOPs() {
    * General logic is thus:
    *  1) Fetch the HOP sheet, do some (re)initialization if needed and grab information from the last synchronization off of it.
    *  2) Work through emails matching HOP search 500 at a time:
-   *      a. Stop searching when we see an email older than our last synchronization time - unless this is a new version of the script
+   *      a. Stop searching when we see an email older than our last synchronization time - unless this is a new version of the script in
+   *         which case we reprocess everything.
    *      b. Try to parse the email as a HOP - skip it if we fail, its not a HOP
    *      c. Add (or Update) parsed HOP object to our registry in local mem
    *      d. Forward email if:
@@ -615,7 +616,8 @@ function logHOPs() {
    *        - the message itself was not forwarded but came straight to our HOP reception account
    *        - the spreadsheet has been previously synced (don't want lots of errant forwards initially)
    *        - the message is newer than the last synchronization time
-   *      e. write HOP list to spreadsheet
+   *      e. write HOP list to spreadsheet, inserting or updating rows where appropriate. HOPs are ordered based on "Last Seen" time,
+   *         so in order of encounter not submission.
    */
 
     console.log(`Searching for: "${HOP_QUERY}"`);
