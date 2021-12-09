@@ -28,7 +28,12 @@ function forwardHOPs() {
               if (!msg.getFrom().includes('donotreply@lahsa.org')) {
                 continue;
               }
-              if (MAX_HOP_ID !== null && parseInt(SUBJ_RE.exec(msg.getSubject())[1]) > MAX_HOP_ID) {
+              let subj = SUBJ_RE.exec(msg.getSubject());
+              if (subj == null) {
+                console.log(`Uninterpretable subject line: ${msg.getSubject()}`);
+                continue;
+              }
+              if (MAX_HOP_ID !== null && parseInt(subj[1]) > MAX_HOP_ID) {
                  continue;
               }
               let dt = `${msg.getDate().toDateString()} at ${msg.getDate().toLocaleTimeString('en-us', { timeZoneName: 'short' })}`;
