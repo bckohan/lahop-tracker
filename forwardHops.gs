@@ -7,8 +7,7 @@ var MAX_HOP_ID = null;
 ///////////////////////////////////////////////////////////////////////
 
 var HOP_QUERY = 'from: donotreply@lahsa.org subject: Outreach Request';
-var SUBJ_RE = /\(Request ID: (\d+)\)/;
-var SUBJ_OLD = /\(Ticket Id #(\d+)\)/;
+var SUBJ_RE = /\((?:Request ID: )|(?:Ticket Id #)(\d+)\)/;
 
 // Main function, the one that you must select before run
 function forwardHOPs() {
@@ -31,11 +30,8 @@ function forwardHOPs() {
               }
               let subj = SUBJ_RE.exec(msg.getSubject());
               if (subj == null) {
-                subj = SUBJ_OLD.exec(msg.getSubject());
-                if (subj == null) {
-                    console.log(`Uninterpretable subject line: ${msg.getSubject()}`);
-                    continue;
-                }
+                console.log(`Uninterpretable subject line: ${msg.getSubject()}`);
+                continue;
               }
               if (MAX_HOP_ID !== null && parseInt(subj[1]) > MAX_HOP_ID) {
                  continue;
