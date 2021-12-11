@@ -8,7 +8,8 @@ var HOP_LABEL = GmailApp.createLabel('HOP');       // tag HOP emails with this l
 ///////////////////////////////////////////////////////////////////////
 
 
-// DONT CHANGE ANYTHING BELOW THIS UNLESS YOU KNOW WHAT YOURE DOING - Parsing these emails is *tricky*, especially when trying to account for all the weird formatting issues different email clients introduce when messages are forwarded
+// DONT CHANGE ANYTHING BELOW THIS UNLESS YOU KNOW WHAT YOURE DOING - Parsing these emails is *tricky*, especially when 
+// trying to account for all the weird formatting issues different email clients introduce when messages are forwarded
 // this is the search string as you would type it into Gmail search
 // The BEST search for finding all HOPs on an email where that email is the account of record with LAHSA is:
 //     'from: donotreply@lahsa.org subject: Outreach Request';
