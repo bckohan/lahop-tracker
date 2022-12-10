@@ -4,7 +4,7 @@
 
 ![Log](./lahop_tracker.png)
 
-A [Google Apps Script](https://developers.google.com/apps-script) that monitors a gmail address for LA-HOP_ request messages and logs the status
+A [Google Apps Script](https://developers.google.com/apps-script) that monitors a gmail address for [LA-HOP](https://www.lahsa.org/portal/apps/la-hop/request) request messages and logs the status
 of those HOPs to a Google spreadsheet. This script is in active use and works well, but it does
 take some know-how to get setup and running. If you or your organization would like to use
 this utility please [fill out this form.](https://docs.google.com/forms/d/1a6rOii5MONQSlbHpghopkAFF-Wb70R29dj9kAUEMkt4)
