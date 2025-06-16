@@ -2,7 +2,7 @@
 
 ***IF YOU WANT TO USE THIS TOOL PLEASE [FILL OUT THIS FORM](https://docs.google.com/forms/d/1a6rOii5MONQSlbHpghopkAFF-Wb70R29dj9kAUEMkt4) TO GET SUPPORT: ***
 
-![Log](./lahop_tracker.png)
+![Log](https://raw.githubusercontent.com/bckohan/lahop-tracker/main/lahop_tracker.png)
 
 A [Google Apps Script](https://developers.google.com/apps-script) that monitors a gmail address for [LA-HOP](https://www.lahsa.org/portal/apps/la-hop/request) request messages and logs the status
 of those HOPs to a Google spreadsheet. This script is in active use and works well, but it does
